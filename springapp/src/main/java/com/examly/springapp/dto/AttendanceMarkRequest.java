@@ -7,7 +7,7 @@ import lombok.*;
 
 import java.time.LocalDate;
 
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class AttendanceMarkRequest {
 
     @NotNull(message = "Student id is required")

@@ -14,7 +14,10 @@ import com.examly.springapp.service.LeaveApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -95,4 +98,22 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         return leaveApplicationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Leave application not found with id: " + id));
     }
+
+    @Override
+    public List<Teacher> getSuggestedSubstitutes(Long requestingTeacherId, LocalDate fromDate, LocalDate toDate) {
+        // Find teacher IDs that already have conflicting leaves
+        Set<Long> busyTeacherIds = leaveApplicationRepository
+                .findTeacherIdsWithLeavesOverlapping(fromDate, toDate)
+                .stream().collect(Collectors.toSet());
+
+        // Also exclude the requesting teacher
+        busyTeacherIds.add(requestingTeacherId);
+
+        // Return all active teachers not in the busy set
+        return teacherRepository.findAll().stream()
+                .filter(t -> Boolean.TRUE.equals(t.getIsActive()))
+                .filter(t -> !busyTeacherIds.contains(t.getTeacherId()))
+                .collect(Collectors.toList());
+    }
 }
+

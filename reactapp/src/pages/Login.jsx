@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext'
 import { IconSun, IconMoon, IconSlate } from '../components/Icons'
 
 export default function Login() {
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -82,7 +82,7 @@ export default function Login() {
             className="input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="admin"
+            placeholder="Username"
             autoFocus
           />
           <label className="label">Password</label>
@@ -98,9 +98,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 22, textAlign: 'center' }}>
-          Default admin: <code>admin</code> / <code>Admin@123</code>
-        </p>
+
       </div>
     </div>
   )

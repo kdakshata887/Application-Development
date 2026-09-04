@@ -83,6 +83,8 @@ public class GlobalExceptionHandler {
             fieldErrors.put(fe.getField(), fe.getDefaultMessage());
         }
         body.put("errors", fieldErrors);
+        // Top-level message so frontend client can always read data.message
+        body.put("message", fieldErrors.values().stream().findFirst().orElse("Validation failed"));
         body.put("path", request.getRequestURI());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }

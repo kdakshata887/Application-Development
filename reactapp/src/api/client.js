@@ -1,9 +1,18 @@
 // Central API client for all backend calls.
-// In dev, requests go to "/api/..." and vite.config.js proxies them to
-// http://localhost:8081, so this file never needs to know the port.
+// In dev, CRA proxies /api/... requests to http://localhost:8082 (configured via "proxy" in package.json).
+// In production, set REACT_APP_API_BASE_URL to the backend origin.
 
-function getToken() {
+const API_BASE = process.env.REACT_APP_API_BASE_URL
+  ? `${process.env.REACT_APP_API_BASE_URL}/api`
+  : '/api'
+
+export function getToken() {
   return localStorage.getItem('edutrack_token')
+}
+
+function clearSession() {
+  localStorage.removeItem('edutrack_token')
+  localStorage.removeItem('edutrack_user')
 }
 
 async function request(path, { method = 'GET', body, auth = true } = {}) {
@@ -13,23 +22,125 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
     if (token) headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(`/api${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let res
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    // Network failure — backend is not reachable
+    const err = new Error('Cannot reach the server. Please check your connection or try again later.')
+    err.status = 0
+    throw err
+  }
 
-  const isJson = res.headers.get('content-type')?.includes('application/json')
-  const data = isJson ? await res.json() : null
+  // Safely parse response — backend may return empty body on 204, 401, etc.
+  const contentType = res.headers.get('content-type') || ''
+  const isJson = contentType.includes('application/json')
+  let data = null
+  if (isJson) {
+    try {
+      data = await res.json()
+    } catch {
+      data = null
+    }
+  }
 
   if (!res.ok) {
+    // 401 on an authenticated call → token expired/invalid, force re-login
+    if (res.status === 401 && auth) {
+      clearSession()
+      window.location.href = '/login'
+      return
+    }
+
+    // 403 → authorization failure, do NOT clear session, just surface the error
+    if (res.status === 403) {
+      const err = new Error('You do not have permission to perform this action.')
+      err.status = 403
+      err.body = data
+      throw err
+    }
+
+    // 404 → resource not found
+    if (res.status === 404) {
+      const message = data?.message || 'The requested resource was not found.'
+      const err = new Error(message)
+      err.status = 404
+      err.body = data
+      throw err
+    }
+
+    // 409 → conflict / duplicate
+    if (res.status === 409) {
+      const message = data?.message || 'A duplicate or conflicting record already exists.'
+      const err = new Error(message)
+      err.status = 409
+      err.body = data
+      throw err
+    }
+
+    // 400 → validation / bad request — extract validation field errors if present
+    if (res.status === 400) {
+      let message = data?.message
+      if (!message && data?.errors) {
+        // Backend returns { errors: { field: "msg", ... } } for @Valid failures
+        message = Object.values(data.errors).join(' | ')
+      }
+      message = message || 'Invalid request. Please check your input.'
+      const err = new Error(message)
+      err.status = 400
+      err.body = data
+      throw err
+    }
+
+    // 500+ → generic server error
+    if (res.status >= 500) {
+      const err = new Error('A server error occurred. Please try again later.')
+      err.status = res.status
+      err.body = data
+      throw err
+    }
+
+    // Fallback for other statuses
     const message = data?.message || data?.error || `Request failed (${res.status})`
     const err = new Error(message)
     err.status = res.status
     err.body = data
     throw err
   }
+
   return data
+}
+
+// Download helper — uses fetch with auth header and handles file responses correctly.
+// Returns a blob URL, or throws with a clean message on error.
+export async function downloadReport(path) {
+  const token = getToken()
+  let res
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+  } catch {
+    throw new Error('Cannot reach the server. Please check your connection.')
+  }
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearSession()
+      window.location.href = '/login'
+      return
+    }
+    if (res.status === 403) throw new Error('You do not have permission to download this report.')
+    if (res.status === 404) throw new Error('Report data not found.')
+    throw new Error(`Download failed (${res.status}). Please try again.`)
+  }
+
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
 }
 
 export const api = {
@@ -143,12 +254,14 @@ export const api = {
   getTeacherWorkload: () => request('/analytics/teacher-workload'),
   getTimetableUtilization: () => request('/analytics/timetable/utilization'),
 
-  // ─── Reports ─────────────────────────────────────────────────────────────
-  downloadBelow75Report: () => '/api/reports/attendance/below75',
-  downloadAttendanceSummary: () => '/api/reports/attendance/summary',
-  downloadTeacherDeployment: () => '/api/reports/teacher/deployment',
-  downloadLeaveSummary: () => '/api/reports/leave/summary',
-  downloadTimetable: () => '/api/reports/timetable',
+  // ─── Reports — paths only (use downloadReport() helper to fetch with auth) ──
+  reportPaths: {
+    below75: '/reports/attendance/below75',
+    attendanceSummary: '/reports/attendance/summary',
+    teacherDeployment: '/reports/teacher/deployment',
+    leaveSummary: '/reports/leave/summary',
+    timetable: '/reports/timetable',
+  },
 
   // ─── Users (Admin) ───────────────────────────────────────────────────────
   getAllUsers: () => request('/users'),
@@ -162,6 +275,3 @@ export const api = {
   getChildAttendancePercentage: (studentId) => request(`/parent/children/${studentId}/percentage`),
   getParentNotifications: () => request('/parent/notifications'),
 }
-
-export { getToken }
-

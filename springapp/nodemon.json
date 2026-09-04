@@ -1,0 +1,14 @@
+{
+  "watch": [
+    "src/main/java",
+    "src/main/resources"
+  ],
+  "ext": "java,properties,xml",
+  "ignore": [
+    "target/**",
+    "src/test/**"
+  ],
+  "delay": 2000,
+  "exec": "mvn spring-boot:run",
+  "legacyWatch": true
+}

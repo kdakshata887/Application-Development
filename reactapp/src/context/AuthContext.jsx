@@ -6,7 +6,14 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem('edutrack_user')
-    return raw ? JSON.parse(raw) : null
+    const token = localStorage.getItem('edutrack_token')
+    // If either piece of session data is missing, clear both to force re-login
+    if (!raw || !token) {
+      localStorage.removeItem('edutrack_token')
+      localStorage.removeItem('edutrack_user')
+      return null
+    }
+    return JSON.parse(raw)
   })
 
   async function login(username, password) {

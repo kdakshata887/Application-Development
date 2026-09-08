@@ -34,4 +34,15 @@ public class NotificationController {
     public ResponseEntity<List<Notification>> getAll() {
         return ResponseEntity.ok(notificationService.getAllNotifications());
     }
+
+    /**
+     * PUT /api/notifications/{id}/read
+     * Mark a notification as read.
+     * FIX: This endpoint was missing — the frontend calls it but it didn't exist.
+     */
+    @PutMapping("/{id}/read")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Notification> markRead(@PathVariable Long id) {
+        return ResponseEntity.ok(notificationService.markAsRead(id));
+    }
 }

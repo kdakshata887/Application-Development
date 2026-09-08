@@ -1,5 +1,7 @@
 package com.examly.springapp.controller;
 
+import com.examly.springapp.dto.BulkDeleteRequest;
+import com.examly.springapp.dto.BulkDeleteResult;
 import com.examly.springapp.model.Day;
 import com.examly.springapp.model.Teacher;
 import com.examly.springapp.service.TeacherService;
@@ -56,5 +58,11 @@ public class TeacherController {
     public ResponseEntity<Void> deleteTeacher(@PathVariable Long id) {
         teacherService.deleteTeacher(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/bulk-delete")
+    @PreAuthorize("hasAnyRole('ADMIN','PRINCIPAL')")
+    public ResponseEntity<BulkDeleteResult> bulkDelete(@Valid @RequestBody BulkDeleteRequest request) {
+        return ResponseEntity.ok(teacherService.bulkDelete(request.getIds()));
     }
 }

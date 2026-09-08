@@ -12,4 +12,5 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     List<Student> findBySection_SectionId(Long sectionId);
     List<Student> findByParent_UserId(Long parentUserId);
     boolean existsByAdmissionNumber(String admissionNumber);
+    long countBySection_SectionId(Long sectionId);
 }

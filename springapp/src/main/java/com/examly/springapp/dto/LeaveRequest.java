@@ -1,6 +1,7 @@
 package com.examly.springapp.dto;
 
 import com.examly.springapp.model.LeaveType;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
@@ -21,5 +22,6 @@ public class LeaveRequest {
     @NotNull(message = "To date is required")
     private LocalDate toDate;
 
+    @NotBlank(message = "Reason is required when applying for leave")
     private String reason;
 }

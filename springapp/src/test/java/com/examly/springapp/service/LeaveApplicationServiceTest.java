@@ -29,6 +29,7 @@ class LeaveApplicationServiceTest {
     @Mock LeaveApplicationRepository leaveApplicationRepository;
     @Mock TeacherRepository teacherRepository;
     @Mock UserRepository userRepository;
+    @Mock TimetableRepository timetableRepository;
 
     @InjectMocks
     LeaveApplicationServiceImpl leaveService;
@@ -52,6 +53,9 @@ class LeaveApplicationServiceTest {
                 .leaveType(LeaveType.SL).build();
         when(leaveApplicationRepository.save(any())).thenReturn(saved);
 
+        when(leaveApplicationRepository.existsOverlappingLeaveForTeacher(
+                eq(1L), any(), any())).thenReturn(false);
+
         LeaveApplication result = leaveService.applyLeave(req);
 
         assertThat(result.getStatus()).isEqualTo(LeaveStatus.PENDING);
@@ -67,6 +71,8 @@ class LeaveApplicationServiceTest {
                 .fromDate(LocalDate.now()).toDate(LocalDate.now())
                 .reason("Test").build();
 
+        // No overlap-check stub needed — the service throws ResourceNotFoundException
+        // before reaching the overlap check (teacher 999 doesn't exist)
         assertThatThrownBy(() -> leaveService.applyLeave(req))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Teacher not found");
@@ -129,6 +135,10 @@ class LeaveApplicationServiceTest {
         when(teacherRepository.findAll()).thenReturn(List.of(t1, t2, t3));
 
         // Requesting is Alice (1L) — should be excluded
+        // Alice has no active timetable entries — conflictSlots will be empty,
+        // so the timetable.findAll() branch is never entered (no stub needed for it).
+        when(timetableRepository.findByTeacher_TeacherIdAndIsActiveTrue(1L)).thenReturn(List.of());
+
         List<Teacher> substitutes = leaveService.getSuggestedSubstitutes(1L, from, to);
 
         // Should only return Charlie — Alice is the requester, Bob is busy

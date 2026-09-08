@@ -1,7 +1,10 @@
 package com.examly.springapp.controller;
 
+import com.examly.springapp.dto.BulkDeleteRequest;
+import com.examly.springapp.dto.BulkDeleteResult;
 import com.examly.springapp.model.ClassSection;
 import com.examly.springapp.service.ClassSectionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,5 +49,11 @@ public class ClassSectionController {
     public ResponseEntity<Void> deleteSection(@PathVariable Long id) {
         classSectionService.deleteSection(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/bulk-delete")
+    @PreAuthorize("hasAnyRole('ADMIN','PRINCIPAL')")
+    public ResponseEntity<BulkDeleteResult> bulkDelete(@Valid @RequestBody BulkDeleteRequest request) {
+        return ResponseEntity.ok(classSectionService.bulkDelete(request.getIds()));
     }
 }

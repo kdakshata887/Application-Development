@@ -1,5 +1,7 @@
 package com.examly.springapp.controller;
 
+import com.examly.springapp.dto.BulkDeleteRequest;
+import com.examly.springapp.dto.BulkDeleteResult;
 import com.examly.springapp.model.Student;
 import com.examly.springapp.service.StudentService;
 import jakarta.validation.Valid;
@@ -59,5 +61,17 @@ public class StudentController {
     public ResponseEntity<Void> deleteStudent(@PathVariable Long id) {
         studentService.deleteStudent(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * POST /api/students/bulk-delete
+     * Bulk-delete students. Only ADMIN/PRINCIPAL can call this.
+     * Returns a detailed result for partial failures.
+     */
+    @PostMapping("/bulk-delete")
+    @PreAuthorize("hasAnyRole('ADMIN','PRINCIPAL')")
+    public ResponseEntity<BulkDeleteResult> bulkDelete(@Valid @RequestBody BulkDeleteRequest request) {
+        BulkDeleteResult result = studentService.bulkDelete(request.getIds());
+        return ResponseEntity.ok(result);
     }
 }

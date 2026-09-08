@@ -22,5 +22,17 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
     List<Long> findTeacherIdsWithLeavesOverlapping(
             @Param("fromDate") LocalDate fromDate,
             @Param("toDate") LocalDate toDate);
-}
 
+    /**
+     * Check if a specific teacher has a PENDING or APPROVED leave overlapping the given range.
+     * Used to detect duplicate/overlapping leave submissions.
+     */
+    @Query("SELECT COUNT(l) > 0 FROM LeaveApplication l " +
+           "WHERE l.teacher.teacherId = :teacherId " +
+           "AND l.status IN ('PENDING','APPROVED') " +
+           "AND l.fromDate <= :toDate AND l.toDate >= :fromDate")
+    boolean existsOverlappingLeaveForTeacher(
+            @Param("teacherId") Long teacherId,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate);
+}

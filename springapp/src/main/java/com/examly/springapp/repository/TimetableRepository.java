@@ -13,4 +13,8 @@ public interface TimetableRepository extends JpaRepository<Timetable, Long> {
     List<Timetable> findByRoom_RoomIdAndDayAndPeriodAndIsActiveTrue(Long roomId, Day day, Integer period);
     List<Timetable> findBySection_SectionIdAndDayAndPeriodAndIsActiveTrue(Long sectionId, Day day, Integer period);
     List<Timetable> findByTeacher_TeacherIdAndDayAndIsActiveTrue(Long teacherId, Day day);
+    // Dependency checks for bulk delete
+    boolean existsBySection_SectionIdAndIsActiveTrue(Long sectionId);
+    boolean existsBySubject_SubjectIdAndIsActiveTrue(Long subjectId);
+    boolean existsByRoom_RoomIdAndIsActiveTrue(Long roomId);
 }

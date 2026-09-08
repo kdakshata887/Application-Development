@@ -3,14 +3,19 @@ package com.examly.springapp.controller;
 import com.examly.springapp.dto.LeaveDecisionRequest;
 import com.examly.springapp.dto.LeaveRequest;
 import com.examly.springapp.model.LeaveApplication;
+import com.examly.springapp.model.Role;
 import com.examly.springapp.model.Teacher;
+import com.examly.springapp.repository.TeacherRepository;
+import com.examly.springapp.security.UserPrincipal;
 import com.examly.springapp.service.LeaveApplicationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -22,10 +27,34 @@ import java.util.List;
 public class LeaveApplicationController {
 
     private final LeaveApplicationService leaveApplicationService;
+    private final TeacherRepository teacherRepository;
 
+    /**
+     * POST /api/leaves — Apply for leave.
+     *
+     * SECURITY FIX: A teacher can only apply leave for themselves.
+     * Admins and Principals can apply on behalf of any teacher.
+     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('TEACHER','CLASS_TEACHER')")
-    public ResponseEntity<LeaveApplication> apply(@Valid @RequestBody LeaveRequest request) {
+    @PreAuthorize("hasAnyRole('TEACHER','CLASS_TEACHER','ADMIN','PRINCIPAL')")
+    public ResponseEntity<LeaveApplication> apply(@Valid @RequestBody LeaveRequest request,
+                                                   @AuthenticationPrincipal UserPrincipal principal) {
+        String role = principal.getRole();
+
+        // Teachers can only apply for themselves
+        if (role.equals(Role.TEACHER.name()) || role.equals(Role.CLASS_TEACHER.name())) {
+            Teacher myTeacher = teacherRepository.findByUser_UserId(principal.getUserId())
+                    .orElseThrow(() -> new AccessDeniedException(
+                            "No teacher profile found for the authenticated user. " +
+                            "You cannot apply for leave on behalf of another teacher."));
+            if (!myTeacher.getTeacherId().equals(request.getTeacherId())) {
+                throw new AccessDeniedException(
+                        "Teachers can only apply for leave for themselves. " +
+                        "Your teacher ID is " + myTeacher.getTeacherId() +
+                        ", but the request specified teacher ID " + request.getTeacherId());
+            }
+        }
+
         return ResponseEntity.status(HttpStatus.CREATED).body(leaveApplicationService.applyLeave(request));
     }
 
@@ -53,9 +82,21 @@ public class LeaveApplicationController {
         return ResponseEntity.ok(leaveApplicationService.getPendingLeaves());
     }
 
+    /**
+     * GET /api/leaves/teacher/{teacherId}
+     * Teachers can only view their own leaves; admins can view any.
+     */
     @GetMapping("/teacher/{teacherId}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<LeaveApplication>> getByTeacher(@PathVariable Long teacherId) {
+    public ResponseEntity<List<LeaveApplication>> getByTeacher(@PathVariable Long teacherId,
+                                                                 @AuthenticationPrincipal UserPrincipal principal) {
+        String role = principal.getRole();
+        if (role.equals(Role.TEACHER.name()) || role.equals(Role.CLASS_TEACHER.name())) {
+            Teacher myTeacher = teacherRepository.findByUser_UserId(principal.getUserId()).orElse(null);
+            if (myTeacher == null || !myTeacher.getTeacherId().equals(teacherId)) {
+                throw new AccessDeniedException("Teachers can only view their own leave applications");
+            }
+        }
         return ResponseEntity.ok(leaveApplicationService.getLeavesByTeacher(teacherId));
     }
 
@@ -67,7 +108,8 @@ public class LeaveApplicationController {
 
     /**
      * GET /api/leaves/substitutes?teacherId={id}&fromDate={date}&toDate={date}
-     * Returns teachers available to substitute during the given date range.
+     * Returns teachers available to substitute during the given date range
+     * and with no timetable clashes at the absent teacher's scheduled periods.
      */
     @GetMapping("/substitutes")
     @PreAuthorize("hasAnyRole('PRINCIPAL','ADMIN','TEACHER','CLASS_TEACHER')")

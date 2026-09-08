@@ -51,10 +51,31 @@ public class AuthServiceImpl implements AuthService {
             ValidationUtil.validatePhone(request.getMobileNumber());
         }
 
+        // Check username uniqueness first — before any DB writes
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new DuplicateResourceException("Username already exists: " + request.getUsername());
         }
 
+        // BUG FIX: Perform all role-specific uniqueness checks BEFORE saving the User entity.
+        // Previously, User was saved first, creating an orphaned User record if the subsequent
+        // uniqueness check failed (even though @Transactional rolls back, it's cleaner this way).
+        if (request.getRole() == Role.STUDENT) {
+            if (request.getAdmissionNumber() == null || request.getAdmissionNumber().isBlank()) {
+                throw new IllegalArgumentException("Admission number is required for student registration");
+            }
+            if (studentRepository.existsByAdmissionNumber(request.getAdmissionNumber())) {
+                throw new DuplicateResourceException("Admission number already exists: " + request.getAdmissionNumber());
+            }
+        } else if (request.getRole() == Role.TEACHER || request.getRole() == Role.CLASS_TEACHER) {
+            if (request.getEmployeeId() == null || request.getEmployeeId().isBlank()) {
+                throw new IllegalArgumentException("Employee ID is required for teacher registration");
+            }
+            if (teacherRepository.existsByEmployeeId(request.getEmployeeId())) {
+                throw new DuplicateResourceException("Employee id already exists: " + request.getEmployeeId());
+            }
+        }
+
+        // All checks passed — now save the User
         User user = User.builder()
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
@@ -66,10 +87,8 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         user = userRepository.save(user);
 
+        // Create the role-specific profile entity
         if (request.getRole() == Role.STUDENT) {
-            if (studentRepository.existsByAdmissionNumber(request.getAdmissionNumber())) {
-                throw new DuplicateResourceException("Admission number already exists: " + request.getAdmissionNumber());
-            }
             ClassSection section = null;
             if (request.getSectionId() != null) {
                 section = classSectionRepository.findById(request.getSectionId()).orElse(null);
@@ -89,9 +108,6 @@ public class AuthServiceImpl implements AuthService {
                     .build();
             studentRepository.save(student);
         } else if (request.getRole() == Role.TEACHER || request.getRole() == Role.CLASS_TEACHER) {
-            if (teacherRepository.existsByEmployeeId(request.getEmployeeId())) {
-                throw new DuplicateResourceException("Employee id already exists: " + request.getEmployeeId());
-            }
             Teacher teacher = Teacher.builder()
                     .user(user)
                     .employeeId(request.getEmployeeId())

@@ -1,5 +1,6 @@
 package com.examly.springapp.service;
 
+import com.examly.springapp.dto.BulkDeleteResult;
 import com.examly.springapp.model.Student;
 
 import java.util.List;
@@ -12,4 +13,5 @@ public interface StudentService {
     List<Student> getStudentsByParent(Long parentUserId);
     Student updateStudent(Long id, Student student);
     void deleteStudent(Long id);
+    BulkDeleteResult bulkDelete(List<Long> ids);
 }

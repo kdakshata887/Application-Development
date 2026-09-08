@@ -1,5 +1,6 @@
 package com.examly.springapp.service;
 
+import com.examly.springapp.dto.BulkDeleteResult;
 import com.examly.springapp.model.ClassSection;
 
 import java.util.List;
@@ -10,4 +11,5 @@ public interface ClassSectionService {
     ClassSection getSectionById(Long id);
     ClassSection updateSection(Long id, ClassSection section);
     void deleteSection(Long id);
+    BulkDeleteResult bulkDelete(List<Long> ids);
 }

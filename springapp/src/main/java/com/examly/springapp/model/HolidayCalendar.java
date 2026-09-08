@@ -5,7 +5,10 @@ import lombok.*;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "holiday_calendar")
+@Table(name = "holiday_calendar",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_holiday_date",
+                columnNames = "holiday_date"))
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class HolidayCalendar {
 

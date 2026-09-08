@@ -3,16 +3,12 @@ package com.examly.springapp.service.impl;
 import com.examly.springapp.dto.LeaveDecisionRequest;
 import com.examly.springapp.dto.LeaveRequest;
 import com.examly.springapp.exception.ResourceNotFoundException;
-import com.examly.springapp.model.LeaveApplication;
-import com.examly.springapp.model.LeaveStatus;
-import com.examly.springapp.model.Teacher;
-import com.examly.springapp.model.User;
-import com.examly.springapp.repository.LeaveApplicationRepository;
-import com.examly.springapp.repository.TeacherRepository;
-import com.examly.springapp.repository.UserRepository;
+import com.examly.springapp.model.*;
+import com.examly.springapp.repository.*;
 import com.examly.springapp.service.LeaveApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -26,11 +22,28 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     private final LeaveApplicationRepository leaveApplicationRepository;
     private final TeacherRepository teacherRepository;
     private final UserRepository userRepository;
+    private final TimetableRepository timetableRepository;
 
     @Override
+    @Transactional
     public LeaveApplication applyLeave(LeaveRequest request) {
         Teacher teacher = teacherRepository.findById(request.getTeacherId())
                 .orElseThrow(() -> new ResourceNotFoundException("Teacher not found with id: " + request.getTeacherId()));
+
+        // FIX: Date range validation — fromDate must not be after toDate
+        if (request.getFromDate().isAfter(request.getToDate())) {
+            throw new IllegalArgumentException(
+                    "From date (" + request.getFromDate() + ") cannot be after to date (" + request.getToDate() + ")");
+        }
+
+        // FIX: Duplicate/overlap detection — prevent overlapping leave applications
+        boolean hasOverlap = leaveApplicationRepository.existsOverlappingLeaveForTeacher(
+                request.getTeacherId(), request.getFromDate(), request.getToDate());
+        if (hasOverlap) {
+            throw new IllegalStateException(
+                    "Teacher already has a pending or approved leave overlapping the requested date range: "
+                    + request.getFromDate() + " to " + request.getToDate());
+        }
 
         LeaveApplication leave = LeaveApplication.builder()
                 .teacher(teacher)
@@ -45,8 +58,16 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     }
 
     @Override
+    @Transactional
     public LeaveApplication approveLeave(Long leaveId, LeaveDecisionRequest request) {
         LeaveApplication leave = getLeaveById(leaveId);
+
+        // FIX: State transition guard — only PENDING leaves can be approved
+        if (leave.getStatus() != LeaveStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Cannot approve a leave that is not in PENDING status. Current status: " + leave.getStatus());
+        }
+
         leave.setStatus(LeaveStatus.APPROVED);
 
         if (request.getApproverUserId() != null) {
@@ -65,8 +86,16 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     }
 
     @Override
+    @Transactional
     public LeaveApplication rejectLeave(Long leaveId, LeaveDecisionRequest request) {
         LeaveApplication leave = getLeaveById(leaveId);
+
+        // FIX: State transition guard — only PENDING leaves can be rejected
+        if (leave.getStatus() != LeaveStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Cannot reject a leave that is not in PENDING status. Current status: " + leave.getStatus());
+        }
+
         leave.setStatus(LeaveStatus.REJECTED);
 
         if (request.getApproverUserId() != null) {
@@ -99,15 +128,44 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Leave application not found with id: " + id));
     }
 
+    /**
+     * FIX: Substitution now checks both:
+     * 1. Teachers who have overlapping leaves (cannot substitute if they're also on leave)
+     * 2. Teachers who are already scheduled in the EXACT timetable slots of the absent teacher
+     *    (cannot substitute if they have classes at the same day/period)
+     */
     @Override
     public List<Teacher> getSuggestedSubstitutes(Long requestingTeacherId, LocalDate fromDate, LocalDate toDate) {
-        // Find teacher IDs that already have conflicting leaves
+        // Find teacher IDs that have conflicting leaves in the date range
         Set<Long> busyTeacherIds = leaveApplicationRepository
                 .findTeacherIdsWithLeavesOverlapping(fromDate, toDate)
                 .stream().collect(Collectors.toSet());
 
-        // Also exclude the requesting teacher
+        // Also exclude the requesting teacher themselves
         busyTeacherIds.add(requestingTeacherId);
+
+        // Get the absent teacher's timetable slots (active entries)
+        List<Timetable> absentTeacherSlots = timetableRepository
+                .findByTeacher_TeacherIdAndIsActiveTrue(requestingTeacherId);
+
+        // Build a set of "DAY_PERIOD" strings representing the absent teacher's schedule
+        Set<String> conflictSlots = absentTeacherSlots.stream()
+                .map(t -> t.getDay().name() + "_" + t.getPeriod())
+                .collect(Collectors.toSet());
+
+        // Find all teachers who have at least one of these day/period slots occupied
+        if (!conflictSlots.isEmpty()) {
+            List<Timetable> allActive = timetableRepository.findAll().stream()
+                    .filter(t -> Boolean.TRUE.equals(t.getIsActive()))
+                    .collect(Collectors.toList());
+            for (Timetable slot : allActive) {
+                String slotKey = slot.getDay().name() + "_" + slot.getPeriod();
+                if (conflictSlots.contains(slotKey)) {
+                    // This teacher is already scheduled at a time the absent teacher teaches
+                    busyTeacherIds.add(slot.getTeacher().getTeacherId());
+                }
+            }
+        }
 
         // Return all active teachers not in the busy set
         return teacherRepository.findAll().stream()
@@ -116,4 +174,3 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
                 .collect(Collectors.toList());
     }
 }
-

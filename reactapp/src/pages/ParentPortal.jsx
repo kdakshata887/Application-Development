@@ -114,13 +114,14 @@ export default function ParentPortal() {
                   <h3 style={{ marginTop: 0 }}>Attendance Records ({attendance.length} entries)</h3>
                   {attendance.length === 0 ? <div className="empty-state">No attendance records found.</div> : (
                     <table>
-                      <thead><tr><th>Date</th><th>Status</th><th>Subject</th><th>Marked By</th></tr></thead>
+                      <thead><tr><th>Date</th><th>Period</th><th>Subject</th><th>Status</th><th>Marked By</th></tr></thead>
                       <tbody>
                         {[...attendance].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30).map(a => (
                           <tr key={a.attendanceId}>
                             <td>{a.date}</td>
+                            <td>{a.period ?? '—'}</td>
+                            <td>{a.subject?.subjectName ?? '—'}</td>
                             <td><span style={{ color: statusColor[a.status], fontWeight: 700 }}>{a.status}</span></td>
-                            <td>{a.subject?.subjectName || '—'}</td>
                             <td style={{ color: 'var(--text-secondary)' }}>{a.capturedBy}</td>
                           </tr>
                         ))}

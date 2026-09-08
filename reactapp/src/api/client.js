@@ -156,29 +156,34 @@ export const api = {
   createStudent: (payload) => request('/students', { method: 'POST', body: payload }),
   updateStudent: (id, payload) => request(`/students/${id}`, { method: 'PUT', body: payload }),
   deleteStudent: (id) => request(`/students/${id}`, { method: 'DELETE' }),
+  bulkDeleteStudents: (ids) => request('/students/bulk-delete', { method: 'POST', body: { ids } }),
 
   // ─── Teachers ────────────────────────────────────────────────────────────
   getTeachers: () => request('/teachers'),
   getTeacherById: (id) => request(`/teachers/${id}`),
   createTeacher: (payload) => request('/auth/register', { method: 'POST', body: { ...payload, role: 'TEACHER' } }),
+  bulkDeleteTeachers: (ids) => request('/teachers/bulk-delete', { method: 'POST', body: { ids } }),
 
   // ─── Class Sections ──────────────────────────────────────────────────────
   getSections: () => request('/sections'),
   createSection: (payload) => request('/sections', { method: 'POST', body: payload }),
   updateSection: (id, payload) => request(`/sections/${id}`, { method: 'PUT', body: payload }),
   deleteSection: (id) => request(`/sections/${id}`, { method: 'DELETE' }),
+  bulkDeleteSections: (ids) => request('/sections/bulk-delete', { method: 'POST', body: { ids } }),
 
   // ─── Subjects ────────────────────────────────────────────────────────────
   getSubjects: () => request('/subjects'),
   createSubject: (payload) => request('/subjects', { method: 'POST', body: payload }),
   updateSubject: (id, payload) => request(`/subjects/${id}`, { method: 'PUT', body: payload }),
   deleteSubject: (id) => request(`/subjects/${id}`, { method: 'DELETE' }),
+  bulkDeleteSubjects: (ids) => request('/subjects/bulk-delete', { method: 'POST', body: { ids } }),
 
   // ─── Rooms ───────────────────────────────────────────────────────────────
   getRooms: () => request('/rooms'),
   createRoom: (payload) => request('/rooms', { method: 'POST', body: payload }),
   updateRoom: (id, payload) => request(`/rooms/${id}`, { method: 'PUT', body: payload }),
   deleteRoom: (id) => request(`/rooms/${id}`, { method: 'DELETE' }),
+  bulkDeleteRooms: (ids) => request('/rooms/bulk-delete', { method: 'POST', body: { ids } }),
 
   // ─── Timetable ───────────────────────────────────────────────────────────
   getAllTimetables: () => request('/timetables'),

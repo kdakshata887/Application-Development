@@ -1,5 +1,6 @@
 package com.examly.springapp.service;
 
+import com.examly.springapp.dto.BulkDeleteResult;
 import com.examly.springapp.model.Room;
 
 import java.util.List;
@@ -10,4 +11,5 @@ public interface RoomService {
     Room getRoomById(Long id);
     Room updateRoom(Long id, Room room);
     void deleteRoom(Long id);
+    BulkDeleteResult bulkDelete(List<Long> ids);
 }

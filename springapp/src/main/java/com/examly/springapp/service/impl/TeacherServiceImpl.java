@@ -1,16 +1,20 @@
 package com.examly.springapp.service.impl;
 
+import com.examly.springapp.dto.BulkDeleteResult;
 import com.examly.springapp.exception.DuplicateResourceException;
 import com.examly.springapp.exception.ResourceNotFoundException;
 import com.examly.springapp.model.Day;
 import com.examly.springapp.model.Teacher;
+import com.examly.springapp.repository.SubjectTeacherMappingRepository;
 import com.examly.springapp.repository.TeacherRepository;
 import com.examly.springapp.repository.TimetableRepository;
 import com.examly.springapp.service.TeacherService;
 import com.examly.springapp.service.ValidationUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -21,6 +25,7 @@ public class TeacherServiceImpl implements TeacherService {
 
     private final TeacherRepository teacherRepository;
     private final TimetableRepository timetableRepository;
+    private final SubjectTeacherMappingRepository mappingRepository;
 
     @Override
     public Teacher createTeacher(Teacher teacher) {
@@ -74,5 +79,52 @@ public class TeacherServiceImpl implements TeacherService {
                 .filter(t -> !t.getTeacherId().equals(absentTeacherId))
                 .filter(t -> !busyTeacherIds.contains(t.getTeacherId()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Bulk-delete teachers by ID.
+     * A teacher with active timetable entries or active subject mappings cannot be deleted.
+     * Inactive entries are acceptable — only ACTIVE assignments block deletion.
+     */
+    @Override
+    @Transactional
+    public BulkDeleteResult bulkDelete(List<Long> ids) {
+        List<Long> deletedIds = new ArrayList<>();
+        List<BulkDeleteResult.FailedEntry> failed = new ArrayList<>();
+
+        for (Long id : ids) {
+            try {
+                Teacher teacher = teacherRepository.findById(id).orElse(null);
+                if (teacher == null) {
+                    failed.add(new BulkDeleteResult.FailedEntry(id, "Teacher not found"));
+                    continue;
+                }
+                // Check active timetable assignments
+                long timetableCount = timetableRepository.findByTeacher_TeacherIdAndIsActiveTrue(id).size();
+                if (timetableCount > 0) {
+                    failed.add(new BulkDeleteResult.FailedEntry(id,
+                            "Cannot delete '" + teacher.getName() + "' — assigned to " + timetableCount + " active timetable slot(s). Remove timetable entries first."));
+                    continue;
+                }
+                // Check active subject-teacher mappings
+                long mappingCount = mappingRepository.findByTeacher_TeacherIdAndIsActiveTrue(id).size();
+                if (mappingCount > 0) {
+                    failed.add(new BulkDeleteResult.FailedEntry(id,
+                            "Cannot delete '" + teacher.getName() + "' — has " + mappingCount + " active subject mapping(s). Remove mappings first."));
+                    continue;
+                }
+                teacherRepository.delete(teacher);
+                deletedIds.add(id);
+            } catch (Exception e) {
+                failed.add(new BulkDeleteResult.FailedEntry(id, "Deletion failed: " + e.getMessage()));
+            }
+        }
+
+        return BulkDeleteResult.builder()
+                .deletedCount(deletedIds.size())
+                .failedCount(failed.size())
+                .deletedIds(deletedIds)
+                .failed(failed)
+                .build();
     }
 }

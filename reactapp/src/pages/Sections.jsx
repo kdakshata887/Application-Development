@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { IconPlus, IconTrash } from '../components/Icons'
+import { IconPlus, IconTrash, IconEdit } from '../components/Icons'
 
 function Toast({ toast }) {
   if (!toast) return null
@@ -16,15 +16,21 @@ function Toast({ toast }) {
 
 export default function Sections() {
   const [sections, setSections] = useState([])
+  const [teachers, setTeachers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ sectionName: '', gradeLevel: '', classTeacherId: '' })
+  const [form, setForm] = useState({ sectionName: '', className: '', classTeacherId: '' })
   const [submitting, setSubmitting] = useState(false)
   const [selected, setSelected] = useState(new Set())
   const [showConfirm, setShowConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Edit state
+  const [editSection, setEditSection] = useState(null)
+  const [editForm, setEditForm] = useState({ sectionName: '', className: '', classTeacherId: '' })
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
@@ -33,7 +39,11 @@ export default function Sections() {
 
   async function load() {
     setLoading(true); setError('')
-    try { setSections(await api.getSections()) }
+    try {
+      const [secs, tchs] = await Promise.all([api.getSections(), api.getTeachers()])
+      setSections(secs)
+      setTeachers(tchs)
+    }
     catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
@@ -44,11 +54,12 @@ export default function Sections() {
     e.preventDefault(); setSubmitting(true); setError('')
     try {
       await api.createSection({
-        sectionName: form.sectionName, gradeLevel: form.gradeLevel,
-        classTeacherId: form.classTeacherId ? Number(form.classTeacherId) : undefined,
+        sectionName: form.sectionName,
+        className: form.className,
+        classTeacher: form.classTeacherId ? { teacherId: Number(form.classTeacherId) } : undefined,
       })
       setShowForm(false)
-      setForm({ sectionName: '', gradeLevel: '', classTeacherId: '' })
+      setForm({ sectionName: '', className: '', classTeacherId: '' })
       load()
       showToast('Section added successfully')
     } catch (err) { setError(err.message) }
@@ -59,6 +70,25 @@ export default function Sections() {
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id))
   function toggleAll() { setSelected(allSelected ? new Set() : new Set(allIds)) }
   function toggleOne(id) { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n) }
+
+  function openEdit(section) {
+    setEditSection(section)
+    setEditForm({ sectionName: section.sectionName || '', className: section.className || '', classTeacherId: section.classTeacher?.teacherId ?? '' })
+  }
+  function closeEdit() { setEditSection(null) }
+
+  async function handleEdit(e) {
+    e.preventDefault(); setEditSubmitting(true); setError('')
+    try {
+      await api.updateSection(editSection.sectionId, {
+        sectionName: editForm.sectionName,
+        className: editForm.className,
+        classTeacher: editForm.classTeacherId ? { teacherId: Number(editForm.classTeacherId) } : undefined,
+      })
+      closeEdit(); load(); showToast('Section updated successfully')
+    } catch (err) { setError(err.message) }
+    finally { setEditSubmitting(false) }
+  }
 
   async function handleBulkDelete() {
     setDeleting(true); setShowConfirm(false)
@@ -112,7 +142,49 @@ export default function Sections() {
         </div>
       )}
 
-      {error && <div className="error-banner" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
+      {/* Edit Modal */}
+      {editSection && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="card" style={{ maxWidth: 480, width: '92%', padding: 28 }}>
+            <h3 style={{ marginTop: 0 }}>Edit Section — <code style={{ fontSize: 14 }}>{editSection.sectionName}</code></h3>
+            <form onSubmit={handleEdit}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="label">Section Name</label>
+                  <input className="input" required value={editForm.sectionName}
+                    onChange={e => setEditForm({ ...editForm, sectionName: e.target.value })} />
+                </div>
+                <div>
+                   <label className="label">Class Name (e.g. Grade 10)</label>
+                   <input className="input" value={editForm.className}
+                     onChange={e => setEditForm({ ...editForm, className: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Class Teacher <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>(optional)</span></label>
+                  <select className="input" value={editForm.classTeacherId}
+                    onChange={e => setEditForm({ ...editForm, classTeacherId: e.target.value })}>
+                    <option value="">— None —</option>
+                    {teachers.map(t => (
+                      <option key={t.teacherId} value={t.teacherId}>
+                        {t.name} {t.employeeId ? `(${t.employeeId})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {error && <div className="error-banner" style={{ marginTop: 10 }}>{error}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-outline" onClick={closeEdit}>Cancel</button>
+                <button type="submit" className="btn" disabled={editSubmitting}>
+                  {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {error && !editSection && <div className="error-banner" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
       {showForm && (
         <div className="card" style={{ marginBottom: 20 }}>
@@ -125,14 +197,21 @@ export default function Sections() {
                   onChange={e => setForm({ ...form, sectionName: e.target.value })} />
               </div>
               <div>
-                <label className="label">Grade Level</label>
-                <input className="input" value={form.gradeLevel} placeholder="e.g. 10"
-                  onChange={e => setForm({ ...form, gradeLevel: e.target.value })} />
+                <label className="label">Class Name (e.g. Grade 10)</label>
+                <input className="input" value={form.className} placeholder="e.g. Grade 10"
+                  onChange={e => setForm({ ...form, className: e.target.value })} />
               </div>
               <div>
-                <label className="label">Class Teacher ID (optional)</label>
-                <input className="input" type="number" value={form.classTeacherId}
-                  onChange={e => setForm({ ...form, classTeacherId: e.target.value })} />
+                <label className="label">Class Teacher <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>(optional)</span></label>
+                <select className="input" value={form.classTeacherId}
+                  onChange={e => setForm({ ...form, classTeacherId: e.target.value })}>
+                  <option value="">— None —</option>
+                  {teachers.map(t => (
+                    <option key={t.teacherId} value={t.teacherId}>
+                      {t.name} {t.employeeId ? `(${t.employeeId})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <button className="btn" disabled={submitting} style={{ marginTop: 12 }}>{submitting ? 'Saving…' : 'Save Section'}</button>
@@ -152,15 +231,21 @@ export default function Sections() {
                 </label>
               </div>
               <table>
-                <thead><tr><th style={{ width: 36 }}></th><th>ID</th><th>Section Name</th><th>Grade</th><th>Class Teacher</th></tr></thead>
+                <thead><tr><th style={{ width: 36 }}></th><th>ID</th><th>Section Name</th><th>Class Name</th><th>Class Teacher</th><th style={{ width: 70 }}>Actions</th></tr></thead>
                 <tbody>
                   {sections.map(s => (
                     <tr key={s.sectionId} style={{ background: selected.has(s.sectionId) ? 'rgba(99,102,241,.07)' : '' }}>
                       <td><input type="checkbox" checked={selected.has(s.sectionId)} onChange={() => toggleOne(s.sectionId)} /></td>
                       <td><code>{s.sectionId}</code></td>
                       <td>{s.sectionName}</td>
-                      <td>{s.gradeLevel || '—'}</td>
+                      <td>{s.className || '—'}</td>
                       <td>{s.classTeacher ? s.classTeacher.name : '—'}</td>
+                      <td>
+                        <button onClick={() => openEdit(s)} title="Edit section"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--indigo)', padding: '4px 6px', borderRadius: 6, display: 'inline-flex', alignItems: 'center' }}>
+                          <IconEdit width={15} height={15} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

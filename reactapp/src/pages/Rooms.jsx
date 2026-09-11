@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { IconPlus, IconTrash } from '../components/Icons'
+import { IconPlus, IconTrash, IconEdit } from '../components/Icons'
 
 const ROOM_TYPES = ['CLASSROOM', 'LABORATORY', 'LIBRARY', 'AUDITORIUM', 'COMPUTER_LAB', 'OTHER']
 
@@ -27,6 +27,11 @@ export default function Rooms() {
   const [selected, setSelected] = useState(new Set())
   const [showConfirm, setShowConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Edit state
+  const [editRoom, setEditRoom] = useState(null)
+  const [editForm, setEditForm] = useState({ roomName: '', capacity: '', roomType: 'CLASSROOM' })
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
@@ -56,6 +61,21 @@ export default function Rooms() {
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id))
   function toggleAll() { setSelected(allSelected ? new Set() : new Set(allIds)) }
   function toggleOne(id) { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n) }
+
+  function openEdit(room) {
+    setEditRoom(room)
+    setEditForm({ roomName: room.roomName, capacity: room.capacity ?? '', roomType: room.roomType })
+  }
+  function closeEdit() { setEditRoom(null) }
+
+  async function handleEdit(e) {
+    e.preventDefault(); setEditSubmitting(true); setError('')
+    try {
+      await api.updateRoom(editRoom.roomId, { ...editForm, capacity: Number(editForm.capacity) })
+      closeEdit(); load(); showToast('Room updated successfully')
+    } catch (err) { setError(err.message) }
+    finally { setEditSubmitting(false) }
+  }
 
   async function handleBulkDelete() {
     setDeleting(true); setShowConfirm(false)
@@ -108,7 +128,43 @@ export default function Rooms() {
         </div>
       )}
 
-      {error && <div className="error-banner" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
+      {/* Edit Modal */}
+      {editRoom && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="card" style={{ maxWidth: 480, width: '92%', padding: 28 }}>
+            <h3 style={{ marginTop: 0 }}>Edit Room — <code style={{ fontSize: 14 }}>{editRoom.roomName}</code></h3>
+            <form onSubmit={handleEdit}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="label">Room Name</label>
+                  <input className="input" required value={editForm.roomName}
+                    onChange={e => setEditForm({ ...editForm, roomName: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Capacity</label>
+                  <input className="input" type="number" min={1} value={editForm.capacity}
+                    onChange={e => setEditForm({ ...editForm, capacity: e.target.value })} />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label className="label">Room Type</label>
+                  <select className="input" value={editForm.roomType} onChange={e => setEditForm({ ...editForm, roomType: e.target.value })}>
+                    {ROOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              {error && <div className="error-banner" style={{ marginTop: 10 }}>{error}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-outline" onClick={closeEdit}>Cancel</button>
+                <button type="submit" className="btn" disabled={editSubmitting}>
+                  {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {error && !editRoom && <div className="error-banner" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
       {showForm && (
         <div className="card" style={{ marginBottom: 20 }}>
@@ -149,7 +205,7 @@ export default function Rooms() {
                 </label>
               </div>
               <table>
-                <thead><tr><th style={{ width: 36 }}></th><th>ID</th><th>Room Name</th><th>Capacity</th><th>Type</th></tr></thead>
+                <thead><tr><th style={{ width: 36 }}></th><th>ID</th><th>Room Name</th><th>Capacity</th><th>Type</th><th style={{ width: 70 }}>Actions</th></tr></thead>
                 <tbody>
                   {rooms.map(r => (
                     <tr key={r.roomId} style={{ background: selected.has(r.roomId) ? 'rgba(99,102,241,.07)' : '' }}>
@@ -158,6 +214,15 @@ export default function Rooms() {
                       <td>{r.roomName}</td>
                       <td>{r.capacity || '—'}</td>
                       <td><span className="badge badge-pending">{r.roomType}</span></td>
+                      <td>
+                        <button
+                          onClick={() => openEdit(r)}
+                          title="Edit room"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--indigo)', padding: '4px 6px', borderRadius: 6, display: 'inline-flex', alignItems: 'center' }}
+                        >
+                          <IconEdit width={15} height={15} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

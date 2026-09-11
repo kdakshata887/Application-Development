@@ -162,6 +162,7 @@ export const api = {
   getTeachers: () => request('/teachers'),
   getTeacherById: (id) => request(`/teachers/${id}`),
   createTeacher: (payload) => request('/auth/register', { method: 'POST', body: { ...payload, role: 'TEACHER' } }),
+  updateTeacher: (id, payload) => request(`/teachers/${id}`, { method: 'PUT', body: payload }),
   bulkDeleteTeachers: (ids) => request('/teachers/bulk-delete', { method: 'POST', body: { ids } }),
 
   // ─── Class Sections ──────────────────────────────────────────────────────

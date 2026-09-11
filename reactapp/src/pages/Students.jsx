@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { IconPlus, IconTrash } from '../components/Icons'
+import { IconPlus, IconTrash, IconEdit } from '../components/Icons'
 
 export default function Students() {
   const [students, setStudents] = useState([])
+  const [sections, setSections] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
@@ -17,6 +18,11 @@ export default function Students() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  // Edit state
+  const [editStudent, setEditStudent] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', admissionNumber: '', sectionId: '', dateOfBirth: '' })
+  const [editSubmitting, setEditSubmitting] = useState(false)
+
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 4000)
@@ -24,7 +30,11 @@ export default function Students() {
 
   async function load() {
     setLoading(true); setError('')
-    try { setStudents(await api.getStudents()) }
+    try {
+      const [studs, secs] = await Promise.all([api.getStudents(), api.getSections()])
+      setStudents(studs)
+      setSections(secs)
+    }
     catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
@@ -55,6 +65,21 @@ export default function Students() {
     const next = new Set(selected)
     next.has(id) ? next.delete(id) : next.add(id)
     setSelected(next)
+  }
+
+  function openEdit(student) {
+    setEditStudent(student)
+    setEditForm({ name: student.name || '', admissionNumber: student.admissionNumber || '', sectionId: student.sectionId ?? '', dateOfBirth: student.dateOfBirth || '' })
+  }
+  function closeEdit() { setEditStudent(null) }
+
+  async function handleEdit(e) {
+    e.preventDefault(); setEditSubmitting(true); setError('')
+    try {
+      await api.updateStudent(editStudent.studentId, { ...editForm, sectionId: editForm.sectionId ? Number(editForm.sectionId) : undefined })
+      closeEdit(); load(); showToast('Student updated successfully')
+    } catch (err) { setError(err.message) }
+    finally { setEditSubmitting(false) }
   }
 
   async function handleBulkDelete() {
@@ -108,7 +133,54 @@ export default function Students() {
         }}>{toast.msg}</div>
       )}
 
-      {error && <div className="error-banner" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
+      {/* Edit Modal */}
+      {editStudent && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="card" style={{ maxWidth: 500, width: '92%', padding: 28 }}>
+            <h3 style={{ marginTop: 0 }}>Edit Student — <code style={{ fontSize: 14 }}>{editStudent.admissionNumber}</code></h3>
+            <form onSubmit={handleEdit}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="label">Full Name</label>
+                  <input className="input" required value={editForm.name}
+                    onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Admission Number</label>
+                  <input className="input" required value={editForm.admissionNumber}
+                    onChange={e => setEditForm({ ...editForm, admissionNumber: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Section</label>
+                  <select className="input" value={editForm.sectionId}
+                    onChange={e => setEditForm({ ...editForm, sectionId: e.target.value })}>
+                    <option value="">— None —</option>
+                    {sections.map(sec => (
+                      <option key={sec.sectionId} value={sec.sectionId}>
+                        {sec.sectionName}{sec.className ? ` (${sec.className})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Date of Birth</label>
+                  <input className="input" type="date" value={editForm.dateOfBirth}
+                    onChange={e => setEditForm({ ...editForm, dateOfBirth: e.target.value })} />
+                </div>
+              </div>
+              {error && <div className="error-banner" style={{ marginTop: 10 }}>{error}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-outline" onClick={closeEdit}>Cancel</button>
+                <button type="submit" className="btn" disabled={editSubmitting}>
+                  {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {error && !editStudent && <div className="error-banner" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
       {/* Confirmation Dialog */}
       {showConfirm && (
@@ -142,9 +214,16 @@ export default function Students() {
                 </div>
               ))}
               <div>
-                <label className="label">Section ID</label>
-                <input className="input" type="number" required value={form.sectionId}
-                  onChange={e => setForm({ ...form, sectionId: e.target.value })} />
+                <label className="label">Section</label>
+                <select className="input" required value={form.sectionId}
+                  onChange={e => setForm({ ...form, sectionId: e.target.value })}>
+                  <option value="">Select a section…</option>
+                  {sections.map(sec => (
+                    <option key={sec.sectionId} value={sec.sectionId}>
+                      {sec.sectionName}{sec.className ? ` (${sec.className})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="label">Date of Birth</label>
@@ -180,6 +259,7 @@ export default function Students() {
                     <th>Name</th>
                     <th>Section</th>
                     <th>Status</th>
+                    <th style={{ width: 70 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -193,6 +273,12 @@ export default function Students() {
                       <td>{s.name}</td>
                       <td>{s.section?.sectionName || s.sectionId || '—'}</td>
                       <td><span className={`badge ${s.isActive ? 'badge-active' : 'badge-absent'}`}>{s.isActive ? 'Active' : 'Inactive'}</span></td>
+                      <td>
+                        <button onClick={() => openEdit(s)} title="Edit student"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--indigo)', padding: '4px 6px', borderRadius: 6, display: 'inline-flex', alignItems: 'center' }}>
+                          <IconEdit width={15} height={15} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

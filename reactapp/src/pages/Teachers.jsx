@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { IconPlus, IconTrash } from '../components/Icons'
+import { IconPlus, IconTrash, IconEdit } from '../components/Icons'
 
 function Toast({ toast }) {
   if (!toast) return null
@@ -53,6 +53,11 @@ export default function Teachers() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  // Edit state
+  const [editTeacher, setEditTeacher] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', qualification: '', subjectSpecialization: '', email: '', mobileNumber: '' })
+  const [editSubmitting, setEditSubmitting] = useState(false)
+
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 4000)
@@ -83,6 +88,21 @@ export default function Teachers() {
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id))
   function toggleAll() { setSelected(allSelected ? new Set() : new Set(allIds)) }
   function toggleOne(id) { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n) }
+
+  function openEdit(teacher) {
+    setEditTeacher(teacher)
+    setEditForm({ name: teacher.name || '', qualification: teacher.qualification || '', subjectSpecialization: teacher.subjectSpecialization || '', email: teacher.email || '', mobileNumber: teacher.mobileNumber || '' })
+  }
+  function closeEdit() { setEditTeacher(null) }
+
+  async function handleEdit(e) {
+    e.preventDefault(); setEditSubmitting(true); setError('')
+    try {
+      await api.updateTeacher(editTeacher.teacherId, editForm)
+      closeEdit(); load(); showToast('Teacher updated successfully')
+    } catch (err) { setError(err.message) }
+    finally { setEditSubmitting(false) }
+  }
 
   async function handleBulkDelete() {
     setDeleting(true); setShowConfirm(false)
@@ -119,7 +139,37 @@ export default function Teachers() {
       </div>
 
       {showConfirm && <ConfirmDialog count={selected.size} onConfirm={handleBulkDelete} onCancel={() => setShowConfirm(false)} deleting={deleting} noun="teacher" />}
-      {error && <div className="error-banner" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
+
+      {/* Edit Modal */}
+      {editTeacher && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="card" style={{ maxWidth: 520, width: '92%', padding: 28 }}>
+            <h3 style={{ marginTop: 0 }}>Edit Teacher — <code style={{ fontSize: 14 }}>{editTeacher.employeeId}</code></h3>
+            <form onSubmit={handleEdit}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[['Full Name', 'name', 'text'], ['Qualification', 'qualification', 'text'],
+                  ['Subject Specialization', 'subjectSpecialization', 'text'], ['Email', 'email', 'email'],
+                  ['Mobile', 'mobileNumber', 'tel']].map(([label, key, type]) => (
+                  <div key={key}>
+                    <label className="label">{label}</label>
+                    <input className="input" type={type} value={editForm[key]}
+                      onChange={e => setEditForm({ ...editForm, [key]: e.target.value })} />
+                  </div>
+                ))}
+              </div>
+              {error && <div className="error-banner" style={{ marginTop: 10 }}>{error}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-outline" onClick={closeEdit}>Cancel</button>
+                <button type="submit" className="btn" disabled={editSubmitting}>
+                  {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {error && !editTeacher && <div className="error-banner" style={{ whiteSpace: 'pre-line' }}>{error}</div>}
 
       {showForm && (
         <div className="card" style={{ marginBottom: 20 }}>
@@ -155,7 +205,7 @@ export default function Teachers() {
                 </label>
               </div>
               <table>
-                <thead><tr><th style={{ width: 36 }}></th><th>Employee ID</th><th>Name</th><th>Specialization</th><th>Status</th></tr></thead>
+                <thead><tr><th style={{ width: 36 }}></th><th>Employee ID</th><th>Name</th><th>Specialization</th><th>Status</th><th style={{ width: 70 }}>Actions</th></tr></thead>
                 <tbody>
                   {teachers.map(t => (
                     <tr key={t.teacherId} style={{ background: selected.has(t.teacherId) ? 'rgba(99,102,241,.07)' : '' }}>
@@ -164,6 +214,12 @@ export default function Teachers() {
                       <td>{t.name}</td>
                       <td>{t.subjectSpecialization || '—'}</td>
                       <td><span className={`badge ${t.isActive ? 'badge-active' : 'badge-absent'}`}>{t.isActive ? 'Active' : 'Inactive'}</span></td>
+                      <td>
+                        <button onClick={() => openEdit(t)} title="Edit teacher"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--indigo)', padding: '4px 6px', borderRadius: 6, display: 'inline-flex', alignItems: 'center' }}>
+                          <IconEdit width={15} height={15} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

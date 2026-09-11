@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -72,9 +72,16 @@ export default function Timetable() {
           <form onSubmit={handleCreate}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label className="label">Section ID</label>
-                <input className="input" type="number" required value={form.sectionId}
-                  onChange={(e) => setForm({ ...form, sectionId: e.target.value })} />
+                <label className="label">Section</label>
+                <AsyncSelect
+                  fetcher={api.getSections}
+                  value={form.sectionId}
+                  onChange={v => setForm({ ...form, sectionId: v })}
+                  getKey={s => s.sectionId}
+                  getLabel={s => `${s.sectionName}${s.className ? ` (${s.className})` : ''}`}
+                  placeholder="Select section…"
+                  required
+                />
               </div>
               <div>
                 <label className="label">Day</label>
@@ -89,25 +96,48 @@ export default function Timetable() {
                   onChange={(e) => setForm({ ...form, period: e.target.value })} />
               </div>
               <div>
-                <label className="label">Subject ID</label>
-                <input className="input" type="number" required value={form.subjectId}
-                  onChange={(e) => setForm({ ...form, subjectId: e.target.value })} />
+                <label className="label">Subject</label>
+                <AsyncSelect
+                  fetcher={api.getSubjects}
+                  value={form.subjectId}
+                  onChange={v => setForm({ ...form, subjectId: v })}
+                  getKey={s => s.subjectId}
+                  getLabel={s => `${s.subjectName}${s.subjectCode ? ` (${s.subjectCode})` : ''}`}
+                  placeholder="Select subject…"
+                  required
+                />
               </div>
               <div>
-                <label className="label">Teacher ID</label>
-                <input className="input" type="number" required value={form.teacherId}
-                  onChange={(e) => setForm({ ...form, teacherId: e.target.value })} />
+                <label className="label">Teacher</label>
+                <AsyncSelect
+                  fetcher={api.getTeachers}
+                  value={form.teacherId}
+                  onChange={v => setForm({ ...form, teacherId: v })}
+                  getKey={t => t.teacherId}
+                  getLabel={t => `${t.name}${t.employeeId ? ` (${t.employeeId})` : ''}`}
+                  placeholder="Select teacher…"
+                  required
+                />
               </div>
               <div>
-                <label className="label">Room ID</label>
-                <input className="input" type="number" required value={form.roomId}
-                  onChange={(e) => setForm({ ...form, roomId: e.target.value })} />
+                <label className="label">Room</label>
+                <AsyncSelect
+                  fetcher={api.getRooms}
+                  value={form.roomId}
+                  onChange={v => setForm({ ...form, roomId: v })}
+                  getKey={r => r.roomId}
+                  getLabel={r => `${r.roomName} (${r.roomType})`}
+                  placeholder="Select room…"
+                  required
+                />
               </div>
             </div>
-            <label className="label">Effective From</label>
-            <input className="input" type="date" value={form.effectiveFrom}
-              onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
-            <button className="btn" disabled={submitting}>
+            <div style={{ marginTop: 12 }}>
+              <label className="label">Effective From</label>
+              <input className="input" type="date" value={form.effectiveFrom}
+                onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
+            </div>
+            <button className="btn" disabled={submitting} style={{ marginTop: 12 }}>
               {submitting ? 'Creating…' : 'Create Entry'}
             </button>
           </form>
@@ -116,9 +146,17 @@ export default function Timetable() {
         <div className="card">
           <h3 style={{ marginTop: 0 }}>View Section Timetable</h3>
           <form onSubmit={handleLoad} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <input className="input" style={{ marginBottom: 0 }} placeholder="Section ID"
-              value={sectionId} onChange={(e) => setSectionId(e.target.value)} />
-            <button className="btn btn-secondary" type="submit">Load</button>
+            <div style={{ flex: 1 }}>
+              <AsyncSelect
+                fetcher={api.getSections}
+                value={sectionId}
+                onChange={v => setSectionId(v)}
+                getKey={s => s.sectionId}
+                getLabel={s => `${s.sectionName}${s.className ? ` (${s.className})` : ''}`}
+                placeholder="Select section…"
+              />
+            </div>
+            <button className="btn" type="submit" style={{ marginBottom: 0 }}>Load</button>
           </form>
 
           {entries && (
@@ -132,9 +170,9 @@ export default function Timetable() {
                     <tr key={t.timetableId}>
                       <td>{t.day}</td>
                       <td>{t.period}</td>
-                      <td>{t.subjectId}</td>
-                      <td>{t.teacherId}</td>
-                      <td>{t.roomId}</td>
+                      <td>{t.subject?.subjectName || t.subjectId}</td>
+                      <td>{t.teacher?.name || t.teacherId}</td>
+                      <td>{t.room?.roomName || t.roomId}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -144,5 +182,41 @@ export default function Timetable() {
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Reusable lazy-loading select ──────────────────────────────────────────────
+// Fetches options once on mount, shows a loading state,
+// then renders a <select> with the provided key/label mappers.
+function AsyncSelect({ fetcher, value, onChange, getKey, getLabel, placeholder, required, style }) {
+  const [options, setOptions] = useState(null)
+  const [loadErr, setLoadErr] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    fetcher()
+      .then(data => { if (!cancelled) setOptions(data) })
+      .catch(err => { if (!cancelled) setLoadErr(err.message) })
+    return () => { cancelled = true }
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loadErr) return <div className="input" style={{ color: 'var(--red)', ...style }}>⚠ {loadErr}</div>
+  if (!options) return <div className="input" style={{ color: 'var(--text-secondary)', ...style }}>Loading…</div>
+
+  return (
+    <select
+      className="input"
+      value={value}
+      required={required}
+      style={style}
+      onChange={e => onChange(e.target.value)}
+    >
+      <option value="">{placeholder || '— Select —'}</option>
+      {options.map(opt => (
+        <option key={getKey(opt)} value={getKey(opt)}>
+          {getLabel(opt)}
+        </option>
+      ))}
+    </select>
   )
 }
